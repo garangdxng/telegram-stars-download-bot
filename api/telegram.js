@@ -1,10 +1,11 @@
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const DOWNLOAD_LINK = process.env.DOWNLOAD_LINK;
-const MOVIE_TITLE = process.env.MOVIE_TITLE || "Official Movie Download";
+const MOVIE_TITLE = process.env.MOVIE_TITLE || "Official Download Access";
 const STAR_PRICE = Number(process.env.STAR_PRICE || 250);
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 const PHOTO_URL = process.env.PHOTO_URL;
+
 async function telegram(method, data) {
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
     method: "POST",
@@ -34,7 +35,7 @@ export default async function handler(req, res) {
   const update = req.body;
 
   try {
-    // Handles /post command from you
+    // When you DM the bot /post, it posts the Stars invoice to your channel
     if (update.message?.text === "/post") {
       const chatId = update.message.chat.id;
 
@@ -55,13 +56,16 @@ export default async function handler(req, res) {
             amount: STAR_PRICE
           }
         ],
-        start_parameter: "movie-download-access"
+        start_parameter: "movie-download-access",
+        photo_url: PHOTO_URL,
+        photo_width: 1280,
+        photo_height: 720
       });
 
       return res.status(200).json({ ok: true });
     }
 
-    // Required: approve the checkout before payment finishes
+    // Telegram requires this before completing the payment
     if (update.pre_checkout_query) {
       await telegram("answerPreCheckoutQuery", {
         pre_checkout_query_id: update.pre_checkout_query.id,
@@ -71,7 +75,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // After successful payment, deliver the download
+    // After successful payment, send the download link to the buyer
     if (update.message?.successful_payment) {
       const buyerChatId = update.message.chat.id;
 
@@ -90,6 +94,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error("Bot error:", err);
-    return res.status(200).json({ ok: false });
+    return res.status(200).json({ ok: false, error: String(err) });
   }
 }
