@@ -4,7 +4,7 @@ const DOWNLOAD_LINK = process.env.DOWNLOAD_LINK;
 const MOVIE_TITLE = process.env.MOVIE_TITLE || "Official Movie Download";
 const STAR_PRICE = Number(process.env.STAR_PRICE || 250);
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
-
+const PHOTO_URL = process.env.PHOTO_URL;
 async function telegram(method, data) {
   const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
     method: "POST",
