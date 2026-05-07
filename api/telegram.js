@@ -16,7 +16,8 @@ async function telegram(method, data) {
   const json = await res.json();
 
   if (!json.ok) {
-    console.error("Telegram API error:", method, json);
+    console.error("Telegram API error:", method, JSON.stringify(json));
+    throw new Error(`${method}: ${json.description}`);
   }
 
   return json;
@@ -28,6 +29,7 @@ export default async function handler(req, res) {
   }
 
   const secret = req.headers["x-telegram-bot-api-secret-token"];
+
   if (WEBHOOK_SECRET && secret !== WEBHOOK_SECRET) {
     return res.status(403).send("Forbidden");
   }
@@ -35,7 +37,7 @@ export default async function handler(req, res) {
   const update = req.body;
 
   try {
-    // When you DM the bot /post, it posts the Stars invoice to your channel
+    // DM your bot /post to send the Stars invoice to your channel
     if (update.message?.text === "/post") {
       const chatId = update.message.chat.id;
 
@@ -44,7 +46,7 @@ export default async function handler(req, res) {
         text: "Posting the Stars purchase message to your channel now..."
       });
 
-      await telegram("sendInvoice", {
+      const invoice = {
         chat_id: CHANNEL_ID,
         title: MOVIE_TITLE,
         description: "Purchase instant download access to the full movie in high quality.",
@@ -56,16 +58,27 @@ export default async function handler(req, res) {
             amount: STAR_PRICE
           }
         ],
-        start_parameter: "movie-download-access",
-        photo_url: PHOTO_URL,
-        photo_width: 1280,
-        photo_height: 720
+        start_parameter: "movie-download-access"
+      };
+
+      // Adds preview image if PHOTO_URL is set in Vercel
+      if (PHOTO_URL) {
+        invoice.photo_url = PHOTO_URL;
+        invoice.photo_width = 1536;
+        invoice.photo_height = 857;
+      }
+
+      await telegram("sendInvoice", invoice);
+
+      await telegram("sendMessage", {
+        chat_id: chatId,
+        text: "✅ Posted successfully."
       });
 
       return res.status(200).json({ ok: true });
     }
 
-    // Telegram requires this before completing the payment
+    // Telegram requires this before finishing the payment
     if (update.pre_checkout_query) {
       await telegram("answerPreCheckoutQuery", {
         pre_checkout_query_id: update.pre_checkout_query.id,
@@ -75,7 +88,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // After successful payment, send the download link to the buyer
+    // After payment succeeds, send the download link
     if (update.message?.successful_payment) {
       const buyerChatId = update.message.chat.id;
 
@@ -93,7 +106,20 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true });
   } catch (err) {
-    console.error("Bot error:", err);
-    return res.status(200).json({ ok: false, error: String(err) });
+    console.error("Bot error:", err.message);
+
+    // DM you the exact error if /post fails
+    if (update.message?.chat?.id) {
+      await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: update.message.chat.id,
+          text: `❌ Error: ${err.message}`
+        })
+      });
+    }
+
+    return res.status(200).json({ ok: false, error: err.message });
   }
 }
